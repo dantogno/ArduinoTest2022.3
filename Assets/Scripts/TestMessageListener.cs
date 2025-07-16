@@ -7,14 +7,19 @@ public class TestMessageListener : MonoBehaviour
     // Invoked when a line of data is received from the serial device.
     void OnMessageArrived(string msg)
     {
-       Debug.Log("Message received: " + msg);
+        Debug.Log("Arduino says: " + msg);
+        
+        // Add your game logic here
+        // For example:
+        // if (msg == "button_pressed") { /* do something */ }
     }
 
-    // Invoked when a connect/disconnect event occurs. The parameter 'success'
-    // will be 'true' upon connection, and 'false' upon disconnection or
-    // failure to connect.
+    // Invoked when a connect/disconnect event occurs.
     void OnConnectionEvent(bool success)
     {
-        Debug.Log("Connection event: " + (success ? "Connected" : "Disconnected"));
+        if (success)
+            Debug.Log("Arduino connected!");
+        else
+            Debug.Log("Arduino disconnected!");
     }
 }

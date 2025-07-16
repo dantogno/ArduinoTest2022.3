@@ -63,12 +63,14 @@ public class SerialController : MonoBehaviour
     // ------------------------------------------------------------------------
     void OnEnable()
     {
+        Debug.Log("SerialController: OnEnable called, starting serial communication");
         serialThread = new SerialThreadLines(portName, 
                                              baudRate, 
                                              reconnectionDelay,
                                              maxUnreadMessages);
         thread = new Thread(new ThreadStart(serialThread.RunForever));
         thread.Start();
+        Debug.Log("SerialController: Thread started for port " + portName + " at " + baudRate + " baud");
     }
 
     // ------------------------------------------------------------------------
@@ -77,6 +79,8 @@ public class SerialController : MonoBehaviour
     // ------------------------------------------------------------------------
     void OnDisable()
     {
+        Debug.Log("SerialController: OnDisable called, stopping serial communication");
+        
         // If there is a user-defined tear-down function, execute it before
         // closing the underlying COM port.
         if (userDefinedTearDownFunction != null)
@@ -112,18 +116,36 @@ public class SerialController : MonoBehaviour
         if (messageListener == null)
             return;
 
+        // Add null check for serialThread
+        if (serialThread == null)
+        {
+            Debug.LogWarning("SerialController: serialThread is null in Update()");
+            return;
+        }
+
         // Read the next message from the queue
         string message = (string)serialThread.ReadMessage();
         if (message == null)
             return;
-
+        
+        Debug.Log("SerialController: Dispatching message: '" + message + "' (Length: " + message.Length + ")");
+        
         // Check if the message is plain data or a connect/disconnect event.
         if (ReferenceEquals(message, SERIAL_DEVICE_CONNECTED))
+        {
+            Debug.Log("SerialController: Sending OnConnectionEvent(true)");
             messageListener.SendMessage("OnConnectionEvent", true);
+        }
         else if (ReferenceEquals(message, SERIAL_DEVICE_DISCONNECTED))
+        {
+            Debug.Log("SerialController: Sending OnConnectionEvent(false)");
             messageListener.SendMessage("OnConnectionEvent", false);
+        }
         else
+        {
+            Debug.Log("SerialController: Sending OnMessageArrived with message: '" + message + "'");
             messageListener.SendMessage("OnMessageArrived", message);
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -132,8 +154,20 @@ public class SerialController : MonoBehaviour
     // ------------------------------------------------------------------------
     public string ReadSerialMessage()
     {
+        // Add null check for serialThread
+        if (serialThread == null)
+        {
+            Debug.LogWarning("SerialController: serialThread is null in ReadSerialMessage()");
+            return null;
+        }
+        
         // Read the next message from the queue
-        return (string)serialThread.ReadMessage();
+        string message = (string)serialThread.ReadMessage();
+        if (message != null)
+        {
+            Debug.Log("SerialController: ReadSerialMessage returned: '" + message + "'");
+        }
+        return message;
     }
 
     // ------------------------------------------------------------------------
@@ -142,6 +176,13 @@ public class SerialController : MonoBehaviour
     // ------------------------------------------------------------------------
     public void SendSerialMessage(string message)
     {
+        if (serialThread == null)
+        {
+            Debug.LogWarning("SerialController: Cannot send message, serialThread is null");
+            return;
+        }
+        
+        Debug.Log("SerialController: Sending message to serial: '" + message + "'");
         serialThread.SendMessage(message);
     }
 
