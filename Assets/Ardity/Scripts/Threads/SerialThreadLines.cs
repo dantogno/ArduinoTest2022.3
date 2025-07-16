@@ -21,67 +21,21 @@ using System.IO.Ports;
  */
 public class SerialThreadLines : AbstractSerialThread
 {
-    private int readAttempts = 0;
-    
     public SerialThreadLines(string portName,
                              int baudRate,
                              int delayBeforeReconnecting,
                              int maxUnreadMessages)
         : base(portName, baudRate, delayBeforeReconnecting, maxUnreadMessages, true)
     {
-        Debug.Log("SerialThreadLines: Constructor called");
     }
 
     protected override void SendToWire(object message, SerialPort serialPort)
     {
-        string stringMessage = (string)message;
-        Debug.Log("SerialThreadLines: SendToWire called with: '" + stringMessage + "'");
-        serialPort.WriteLine(stringMessage);
+        serialPort.WriteLine((string) message);
     }
 
     protected override object ReadFromWire(SerialPort serialPort)
     {
-        readAttempts++;
-        
-        // Log every 50 read attempts to see what's happening
-        if (readAttempts % 50 == 0)
-        {
-            Debug.Log("SerialThreadLines: ReadFromWire attempt #" + readAttempts + 
-                     ". Port open: " + serialPort.IsOpen + 
-                     ", BytesToRead: " + serialPort.BytesToRead +
-                     ", ReadTimeout: " + serialPort.ReadTimeout);
-        }
-        
-        try
-        {
-            // Check if there are any bytes available to read
-            if (serialPort.BytesToRead > 0)
-            {
-                Debug.Log("SerialThreadLines: " + serialPort.BytesToRead + " bytes available to read");
-            }
-            
-            string result = serialPort.ReadLine();
-            Debug.Log("SerialThreadLines: ReadFromWire received: '" + result + "' (Length: " + result.Length + ")");
-            return result;
-        }
-        catch (System.TimeoutException)
-        {
-            // Log first few timeouts to confirm they're happening
-            if (readAttempts <= 10)
-            {
-                Debug.Log("SerialThreadLines: ReadFromWire timeout #" + readAttempts);
-            }
-            return null;
-        }
-        catch (System.InvalidOperationException ex)
-        {
-            Debug.LogError("SerialThreadLines: InvalidOperationException - Port may be closed: " + ex.Message);
-            throw;
-        }
-        catch (System.Exception ex)
-        {
-            Debug.LogError("SerialThreadLines: ReadFromWire unexpected exception: " + ex.GetType().Name + " - " + ex.Message);
-            throw;
-        }
+        return serialPort.ReadLine();
     }
 }

@@ -53,12 +53,6 @@ public abstract class AbstractSerialThread
 
     private bool enqueueStatusMessages = false;
 
-    // Debug counters
-    private int messageCount = 0;
-    private int timeoutCount = 0;
-    private int runOnceCount = 0;
-    private DateTime lastLogTime = DateTime.Now;
-
 
     /**************************************************************************
      * Methods intended to be invoked from the Unity thread.
@@ -82,8 +76,6 @@ public abstract class AbstractSerialThread
 
         inputQueue = Queue.Synchronized(new Queue());
         outputQueue = Queue.Synchronized(new Queue());
-        
-        Debug.Log("AbstractSerialThread: Constructor called with port=" + portName + ", baud=" + baudRate + ", enqueueStatus=" + enqueueStatusMessages);
     }
 
     // ------------------------------------------------------------------------
@@ -95,7 +87,6 @@ public abstract class AbstractSerialThread
         {
             stopRequested = true;
         }
-        Debug.Log("AbstractSerialThread: Stop requested");
     }
 
     // ------------------------------------------------------------------------
@@ -109,9 +100,7 @@ public abstract class AbstractSerialThread
         if (inputQueue.Count == 0)
             return null;
 
-        object message = inputQueue.Dequeue();
-        Debug.Log("AbstractSerialThread: ReadMessage returning: '" + message + "' (Queue count: " + inputQueue.Count + ")");
-        return message;
+        return inputQueue.Dequeue();
     }
 
     // ------------------------------------------------------------------------
@@ -122,7 +111,6 @@ public abstract class AbstractSerialThread
     public void SendMessage(object message)
     {
         outputQueue.Enqueue(message);
-        Debug.Log("AbstractSerialThread: SendMessage queued: '" + message + "'");
     }
 
 
@@ -138,8 +126,6 @@ public abstract class AbstractSerialThread
     // ------------------------------------------------------------------------
     public void RunForever()
     {
-        Debug.Log("AbstractSerialThread: RunForever started for port " + portName);
-        
         // This 'try' is for having a log message in case of an unexpected
         // exception.
         try
@@ -150,30 +136,17 @@ public abstract class AbstractSerialThread
                 {
                     AttemptConnection();
 
-                    Debug.Log("AbstractSerialThread: Entering RunOnce loop");
-                    
                     // Enter the semi-infinite loop of reading/writing to the
                     // device.
                     while (!IsStopRequested())
-                    {
                         RunOnce();
-                        
-                        // Log every 100 iterations to see if loop is running
-                        runOnceCount++;
-                        if (runOnceCount % 100 == 0)
-                        {
-                            Debug.Log("AbstractSerialThread: RunOnce called " + runOnceCount + " times. Messages: " + messageCount + ", Timeouts: " + timeoutCount);
-                        }
-                    }
-                    
-                    Debug.Log("AbstractSerialThread: Exited RunOnce loop due to stop request");
                 }
                 catch (Exception ioe)
                 {
                     // A disconnection happened, or there was a problem
                     // reading/writing to the device. Log the detailed message
                     // to the console and notify the listener.
-                    Debug.LogWarning("AbstractSerialThread Exception: " + ioe.Message + " StackTrace: " + ioe.StackTrace);
+                    Debug.LogWarning("Exception: " + ioe.Message + " StackTrace: " + ioe.StackTrace);
                     if (enqueueStatusMessages)
                         inputQueue.Enqueue(SerialController.SERIAL_DEVICE_DISCONNECTED);
 
@@ -186,12 +159,9 @@ public abstract class AbstractSerialThread
                     // user-defined time. It is OK to sleep here as this is not
                     // Unity's thread, this doesn't affect frame-rate
                     // throughput.
-                    Debug.Log("AbstractSerialThread: Waiting " + delayBeforeReconnecting + "ms before reconnecting");
                     Thread.Sleep(delayBeforeReconnecting);
                 }
             }
-
-            Debug.Log("AbstractSerialThread: Exited main loop due to stop request");
 
             // Before closing the COM port, give the opportunity for all messages
             // from the output queue to reach the other endpoint.
@@ -206,10 +176,8 @@ public abstract class AbstractSerialThread
         }
         catch (Exception e)
         {
-            Debug.LogError("AbstractSerialThread: Unknown exception: " + e.Message + " " + e.StackTrace);
+            Debug.LogError("Unknown exception: " + e.Message + " " + e.StackTrace);
         }
-        
-        Debug.Log("AbstractSerialThread: RunForever ended");
     }
 
     // ------------------------------------------------------------------------
@@ -217,40 +185,18 @@ public abstract class AbstractSerialThread
     // ------------------------------------------------------------------------
     private void AttemptConnection()
     {
-        Debug.Log("AbstractSerialThread: Attempting connection to " + portName + " at " + baudRate + " baud");
-        
         serialPort = new SerialPort(portName, baudRate);
         serialPort.ReadTimeout = readTimeout;
         serialPort.WriteTimeout = writeTimeout;
         
-        // Try enabling DTR/RTS instead of disabling them
+        // Enable DTR/RTS for Arduino compatibility
         serialPort.DtrEnable = true;
         serialPort.RtsEnable = true;
         
-        // Set additional serial port parameters
-        serialPort.DataBits = 8;
-        serialPort.Parity = Parity.None;
-        serialPort.StopBits = StopBits.One;
-        serialPort.Handshake = Handshake.None;
-        
         serialPort.Open();
 
-        Debug.Log("AbstractSerialThread: Connection successful. Port is open: " + serialPort.IsOpen);
-        
-        // Add a delay after opening to let Arduino settle
-        Thread.Sleep(2000);
-        Debug.Log("AbstractSerialThread: Waited 2 seconds for Arduino to settle");
-        
-        // Clear any existing data in the buffer
-        serialPort.DiscardInBuffer();
-        serialPort.DiscardOutBuffer();
-        Debug.Log("AbstractSerialThread: Cleared serial buffers");
-
         if (enqueueStatusMessages)
-        {
             inputQueue.Enqueue(SerialController.SERIAL_DEVICE_CONNECTED);
-            Debug.Log("AbstractSerialThread: CONNECTED message enqueued");
-        }
     }
 
     // ------------------------------------------------------------------------
@@ -263,12 +209,11 @@ public abstract class AbstractSerialThread
 
         try
         {
-            Debug.Log("AbstractSerialThread: Closing serial port");
             serialPort.Close();
         }
-        catch (IOException ioe)
+        catch (IOException)
         {
-            Debug.LogWarning("AbstractSerialThread: IOException while closing port: " + ioe.Message);
+            // Nothing to do, not a big deal, don't try to cleanup any further.
         }
 
         serialPort = null;
@@ -299,9 +244,7 @@ public abstract class AbstractSerialThread
             // Send a message.
             if (outputQueue.Count != 0)
             {
-                object outMessage = outputQueue.Dequeue();
-                Debug.Log("AbstractSerialThread: Sending message: '" + outMessage + "'");
-                SendToWire(outMessage, serialPort);
+                SendToWire(outputQueue.Dequeue(), serialPort);
             }
 
             // Read a message.
@@ -311,38 +254,19 @@ public abstract class AbstractSerialThread
             object inputMessage = ReadFromWire(serialPort);
             if (inputMessage != null)
             {
-                messageCount++;
-                Debug.Log("AbstractSerialThread: Message received (#" + messageCount + "): '" + inputMessage + "'");
-                
                 if (inputQueue.Count < maxUnreadMessages)
                 {
                     inputQueue.Enqueue(inputMessage);
-                    Debug.Log("AbstractSerialThread: Message enqueued. Queue count: " + inputQueue.Count);
                 }
                 else
                 {
-                    Debug.LogWarning("AbstractSerialThread: Queue is full. Dropping message: " + inputMessage);
+                    Debug.LogWarning("Queue is full. Dropping message: " + inputMessage);
                 }
             }
         }
         catch (TimeoutException)
         {
             // This is normal, not everytime we have a report from the serial device
-            timeoutCount++;
-            
-            // Log timeout stats every 50 timeouts (about 5 seconds)
-            if (timeoutCount % 50 == 0)
-            {
-                DateTime now = DateTime.Now;
-                double elapsed = (now - lastLogTime).TotalSeconds;
-                Debug.Log("AbstractSerialThread: " + timeoutCount + " timeouts so far. Messages received: " + messageCount + ". Time elapsed: " + elapsed.ToString("F1") + "s");
-                lastLogTime = now;
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError("AbstractSerialThread: Unexpected exception in RunOnce: " + ex.Message + " StackTrace: " + ex.StackTrace);
-            throw; // Re-throw to trigger reconnection
         }
     }
 
